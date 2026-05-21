@@ -113,7 +113,8 @@ class PolicyEngine:
         self.zones = []
         policy_path = Path(self.policy_dir)
         
-        if not policy_path.exists():
+        # Check if folder doesn't exist OR is empty
+        if not policy_path.exists() or not any(policy_path.iterdir()):
             policy_path.mkdir(parents=True, exist_ok=True)
             self._create_default_policies()
 
@@ -792,6 +793,11 @@ def get_stats():
 # ═══════════════════════════════════════════════════════════
 # STARTUP
 # ═══════════════════════════════════════════════════════════
+# Serve frontend in production
+frontend_dist = Path(__file__).parent / "frontend" / "dist"
+if frontend_dist.exists():
+    app.mount("/", StaticFiles(directory=str(frontend_dist), html=True), name="frontend")
+
 
 if __name__ == "__main__":
     import uvicorn
