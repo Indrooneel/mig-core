@@ -1,0 +1,21 @@
+Copyright (c) 2026 House of Galatine. All rights reserved.
+
+MIG Core is available for evaluation and non-commercial use only.
+
+You may:
+- Download and run MIG Core for evaluation purposes
+- Test MIG Core in non-production environments
+- Reference MIG Core in academic or research contexts
+
+You may NOT:
+- Deploy MIG Core in production environments without a commercial license
+- Modify and redistribute MIG Core as your own product
+- Remove or alter copyright notices
+
+The MIG production engine (Neo4j graph-based, semantic matching)
+is proprietary and not included in this repository.
+
+For commercial licensing: neel@houseofgalatine.com
+
+House of Galatine
+houseofgalatine.com
