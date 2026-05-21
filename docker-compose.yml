@@ -9,12 +9,13 @@ services:
     volumes:
       - ./policies:/app/policies
       - mig-data:/app/data
+      - ./frontend/dist:/app/static  # ← Mount built frontend (optional)
     environment:
       - MIG_POLICY_DIR=/app/policies
       - MIG_AUDIT_DB=/app/data/audit.db
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 30s
       timeout: 5s
       retries: 3
