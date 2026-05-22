@@ -6,10 +6,14 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      '/api': {
-        target: 'http://localhost:8000',
-        changeOrigin: true,
-      }
+      '/validate': 'http://localhost:8000',
+      '/approve': 'http://localhost:8000',
+      '/reject': 'http://localhost:8000',
+      '/policies': 'http://localhost:8000',
+      '/zones': 'http://localhost:8000',
+      '/audit': 'http://localhost:8000',
+      '/health': 'http://localhost:8000',
+      '/stats': 'http://localhost:8000',
     }
   }
 })
