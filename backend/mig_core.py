@@ -4,11 +4,7 @@ House of Galatine © 2026
 
 The execution boundary. Nothing reaches the controller without approval.
 
-This is the open-core version of MIG. No Neo4j. No embeddings. No AI.
-Pure deterministic policy matching with JSON policies and SQLite audit.
-
 Deploy with: docker compose up
-Configure through: the web dashboard or JSON policy files
 """
 
 import json
@@ -27,19 +23,11 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 
-# ═══════════════════════════════════════════════════════════
-# CONFIG
-# ═══════════════════════════════════════════════════════════
-
 POLICY_DIR = os.environ.get("MIG_POLICY_DIR", "./policies")
 AUDIT_DB = os.environ.get("MIG_AUDIT_DB", "./data/audit.db")
 VERSION = "1.0.0"
 MODE = "fail-closed"
 
-
-# ═══════════════════════════════════════════════════════════
-# APP
-# ═══════════════════════════════════════════════════════════
 
 app = FastAPI(
     title="MIG Core",
@@ -80,7 +68,7 @@ class PolicyCreate(BaseModel):
     id: str
     description: str
     action_type: str
-    direction: str  # ALLOW, DENY, APPROVAL
+    direction: str
     enforcement: Optional[str] = "standard"
     notify: Optional[list] = []
     zone: Optional[str] = None
@@ -112,13 +100,14 @@ class PolicyEngine:
         self.policies = []
         self.zones = []
         policy_path = Path(self.policy_dir)
-        
-        # Check if folder doesn't exist OR is empty
-        if not policy_path.exists() or not any(policy_path.iterdir()):
-            policy_path.mkdir(parents=True, exist_ok=True)
-            self._create_default_policies()
+        policy_path.mkdir(parents=True, exist_ok=True)
 
-        for f in policy_path.glob("*.json"):
+        json_files = list(policy_path.glob("*.json"))
+        if not json_files:
+            self._create_default_policies()
+            json_files = list(policy_path.glob("*.json"))
+
+        for f in json_files:
             try:
                 data = json.loads(f.read_text())
                 if "policies" in data:
@@ -291,7 +280,6 @@ class PolicyEngine:
 # ═══════════════════════════════════════════════════════════
 
 class ValidationEngine:
-    # PII patterns
     PII_PATTERNS = [
         (r'[\w.+-]+@[\w-]+\.[\w.]+', 'email'),
         (r'\b\d{3}-\d{2}-\d{4}\b', 'ssn'),
@@ -301,7 +289,6 @@ class ValidationEngine:
     PII_KEYWORDS = ["personal data", "salary", "ssn", "passport", "bank account",
                     "credit card", "social security", "medical", "compensation"]
 
-    # Data sensitivity
     SENSITIVITY_MAP = {
         "read": "low", "sensor": "low", "monitor": "low", "status": "low",
         "write": "high", "register": "high", "set": "high", "modify": "high",
@@ -332,7 +319,7 @@ class ValidationEngine:
         decision = "ALLOW"
         matched_policy = None
 
-        # ── STEP 1: PII Detection ──
+        # STEP 1: PII Detection
         pii_found = []
         for pattern, pii_type in self.PII_PATTERNS:
             if re.search(pattern, lower):
@@ -353,12 +340,12 @@ class ValidationEngine:
         else:
             checks.append({"name": "PII Detection", "status": "pass", "detail": "No sensitive data patterns detected"})
 
-        # ── STEP 2: Action Inference ──
+        # STEP 2: Action Inference
         action_type = req.action_type or self._infer_action(lower)
         checks.append({"name": "Action Inference", "status": "pass",
                        "detail": f"Inferred: {action_type}"})
 
-        # ── STEP 3: Payload Analysis ──
+        # STEP 3: Payload Analysis
         sensitivity = "low"
         for word, sens in self.SENSITIVITY_MAP.items():
             if word in lower:
@@ -389,7 +376,7 @@ class ValidationEngine:
         checks.append({"name": "Payload Inspection", "status": "fail" if risk_score >= 70 else "flag" if risk_score >= 40 else "pass",
                        "detail": f"Sensitivity: {sensitivity} | Destination: {destination} | Risk: {risk_score}"})
 
-        # ── STEP 4: Policy Matching ──
+        # STEP 4: Policy Matching
         matched_policy = self._match_policy(lower, action_type, req.stage)
 
         if matched_policy:
@@ -402,7 +389,7 @@ class ValidationEngine:
             checks.append({"name": "Policy Match", "status": "fail",
                           "detail": "No matching policy — fail-closed → DENY"})
 
-        # ── STEP 5: Stage Check ──
+        # STEP 5: Stage Check
         if matched_policy and "stage_blocked" in matched_policy:
             if req.stage in matched_policy.get("stage_blocked", []):
                 decision = "DENY"
@@ -416,7 +403,7 @@ class ValidationEngine:
             checks.append({"name": "Stage Check", "status": "pass",
                           "detail": f"Mode: {req.stage}"})
 
-        # ── STEP 6: Zone Check ──
+        # STEP 6: Zone Check
         if req.zone:
             zone = next((z for z in self.policy_engine.zones if z["id"] == req.zone), None)
             if zone:
@@ -434,7 +421,7 @@ class ValidationEngine:
         else:
             checks.append({"name": "Zone Check", "status": "pass", "detail": "No zone constraint"})
 
-        # ── STEP 7: Overrides ──
+        # STEP 7: Overrides
         if pii_found and is_external and decision == "ALLOW":
             decision = "DENY"
             flags.append("PII_OVERRIDE")
@@ -450,7 +437,7 @@ class ValidationEngine:
         else:
             checks.append({"name": "Override", "status": "pass", "detail": "No override needed"})
 
-        # ── STEP 8: Setpoint Deviation Check ──
+        # STEP 8: Setpoint Deviation Check
         deviation = self._extract_deviation(lower)
         if deviation is not None and deviation > 5.0 and decision != "DENY":
             decision = "DENY"
@@ -463,7 +450,7 @@ class ValidationEngine:
             checks.append({"name": "Setpoint Check", "status": "pass",
                           "detail": f"Deviation: {deviation:.1f}% within safe bounds"})
 
-        # ── Final ──
+        # Final
         checks.append({"name": "Decision", "status": "pass" if decision == "ALLOW" else "fail" if decision == "DENY" else "flag",
                        "detail": f"Final: {decision} | Risk: {risk_score}/100"})
 
@@ -503,7 +490,7 @@ class ValidationEngine:
             num = re.search(r'(\d+)', text)
             if num:
                 val = int(num.group(1))
-                if val > 100:  # likely dangerous for most OT setpoints
+                if val > 100:
                     return "write_setpoint_major"
             return "write_setpoint_minor"
         if re.search(r'set|write|change|modify', text):
@@ -511,12 +498,10 @@ class ValidationEngine:
         return "unknown"
 
     def _match_policy(self, text: str, action_type: str, stage: str) -> Optional[dict]:
-        # First try exact action_type match
         for p in self.policy_engine.policies:
             if p.get("action_type") == action_type:
                 return p
 
-        # Then try keyword matching — most specific (DENY) first
         deny_policies = [p for p in self.policy_engine.policies if p["direction"] == "DENY"]
         approval_policies = [p for p in self.policy_engine.policies if p["direction"] == "APPROVAL"]
         allow_policies = [p for p in self.policy_engine.policies if p["direction"] == "ALLOW"]
@@ -542,16 +527,15 @@ class ValidationEngine:
         num_match = re.search(r'(\d+)\s*(rpm|kpa|degrees?|percent|%|psi|bar|mpa)', text)
         if num_match:
             val = int(num_match.group(1))
-            baseline = 50  # configurable per deployment
+            baseline = 50
             if baseline > 0:
                 return abs(val - baseline) / baseline * 100
-        # Also catch bare numbers with setpoint context
         if re.search(r'set|write|change|adjust', text):
             num_match = re.search(r'to\s+(\d+)', text)
             if num_match:
                 val = int(num_match.group(1))
                 baseline = 50
-                if val > 200 and baseline > 0:  # likely dangerous
+                if val > 200 and baseline > 0:
                     return abs(val - baseline) / baseline * 100
         return None
 
@@ -664,8 +648,6 @@ class AuditLog:
             "allowed": by_decision.get("ALLOW", 0),
             "denied": by_decision.get("DENY", 0),
             "approval": by_decision.get("APPROVAL", 0),
-            "approved": by_decision.get("APPROVED", 0),
-            "rejected": by_decision.get("REJECTED", 0),
         }
 
 
@@ -694,13 +676,11 @@ def health():
         "total_decisions": stats["total"],
     }
 
-
 @app.post("/validate")
 def validate(req: ValidateRequest):
     result = validation_engine.validate(req)
     audit_log.log(result, req.text)
     return result
-
 
 @app.post("/approve")
 def approve(req: ApproveRequest):
@@ -709,7 +689,6 @@ def approve(req: ApproveRequest):
         raise HTTPException(status_code=404, detail="Decision not found")
     return {"status": "approved", "decision_id": req.decision_id, "approved_by": req.approved_by}
 
-
 @app.post("/reject")
 def reject(req: RejectRequest):
     success = audit_log.reject(req.decision_id, req.rejected_by, req.reason)
@@ -717,13 +696,9 @@ def reject(req: RejectRequest):
         raise HTTPException(status_code=404, detail="Decision not found")
     return {"status": "rejected", "decision_id": req.decision_id, "rejected_by": req.rejected_by}
 
-
-# ── Policy Management ──
-
 @app.get("/policies")
 def list_policies():
     return {"policies": policy_engine.get_all_policies(), "count": len(policy_engine.policies)}
-
 
 @app.post("/policies")
 def create_policy(policy: PolicyCreate):
@@ -732,19 +707,14 @@ def create_policy(policy: PolicyCreate):
     policy_engine.add_policy(p)
     return {"status": "created", "policy": p}
 
-
 @app.delete("/policies/{policy_id}")
 def delete_policy(policy_id: str):
     policy_engine.remove_policy(policy_id)
     return {"status": "deleted", "policy_id": policy_id}
 
-
-# ── Zone Management ──
-
 @app.get("/zones")
 def list_zones():
     return {"zones": policy_engine.get_all_zones(), "count": len(policy_engine.zones)}
-
 
 @app.post("/zones")
 def create_zone(zone: ZoneCreate):
@@ -753,19 +723,14 @@ def create_zone(zone: ZoneCreate):
     policy_engine.add_zone(z)
     return {"status": "created", "zone": z}
 
-
-# ── Audit ──
-
 @app.get("/audit")
 def get_audit(limit: int = 50):
     decisions = audit_log.get_recent(limit)
     return {"count": len(decisions), "decisions": decisions}
 
-
 @app.get("/audit/stats")
 def get_audit_stats():
     return audit_log.get_stats()
-
 
 @app.get("/audit/{decision_id}")
 def get_decision(decision_id: str):
@@ -773,9 +738,6 @@ def get_decision(decision_id: str):
     if not d:
         raise HTTPException(status_code=404, detail="Decision not found")
     return d
-
-
-# ── Stats ──
 
 @app.get("/stats")
 def get_stats():
@@ -788,15 +750,6 @@ def get_stats():
         },
         "audit": audit_log.get_stats(),
     }
-
-
-# ═══════════════════════════════════════════════════════════
-# STARTUP
-# ═══════════════════════════════════════════════════════════
-# Serve frontend in production
-frontend_dist = Path(__file__).parent / "frontend" / "dist"
-if frontend_dist.exists():
-    app.mount("/", StaticFiles(directory=str(frontend_dist), html=True), name="frontend")
 
 
 if __name__ == "__main__":
