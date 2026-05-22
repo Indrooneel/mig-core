@@ -1,0 +1,55 @@
+{
+  "organization": "Example OT Plant",
+  "vertical": "OT/ICS",
+  "version": "1.0",
+  "policies": [
+    {
+      "id": "POL-OT-ALLOW-001",
+      "description": "Reading sensor values from control zone PLCs is permitted as a non-destructive read-only operation",
+      "action_type": "read_sensor",
+      "direction": "ALLOW",
+      "enforcement": "standard",
+      "notify": []
+    },
+    {
+      "id": "POL-OT-APPR-001",
+      "description": "Setpoint changes within 5% of current value require single operator confirmation before execution",
+      "action_type": "write_setpoint_minor",
+      "direction": "APPROVAL",
+      "enforcement": "elevated",
+      "notify": ["shift_operator"]
+    },
+    {
+      "id": "POL-OT-DENY-001",
+      "description": "Writing to safety instrumented system registers is never allowed — SIS integrity is the last line of defense against catastrophic failure",
+      "action_type": "write_safety",
+      "direction": "DENY",
+      "enforcement": "critical",
+      "notify": ["safety_officer", "plant_supervisor", "control_engineer"]
+    },
+    {
+      "id": "POL-OT-DENY-002",
+      "description": "Setpoint changes exceeding 5% of current operating value are blocked as they risk process instability",
+      "action_type": "write_setpoint_major",
+      "direction": "DENY",
+      "enforcement": "critical",
+      "notify": ["control_engineer", "shift_operator", "safety_officer"]
+    },
+    {
+      "id": "POL-OT-DENY-003",
+      "description": "Firmware updates during production mode are never allowed as they risk controller failure and process disruption",
+      "action_type": "firmware_production",
+      "direction": "DENY",
+      "enforcement": "critical",
+      "notify": ["control_engineer", "plant_supervisor", "safety_officer"]
+    },
+    {
+      "id": "POL-OT-DENY-004",
+      "description": "Exporting control system configuration outside the OT network boundary is never allowed",
+      "action_type": "export_external",
+      "direction": "DENY",
+      "enforcement": "critical",
+      "notify": ["ciso", "plant_supervisor"]
+    }
+  ]
+}
