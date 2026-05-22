@@ -8,13 +8,15 @@ One command to deploy. Every command validated before it reaches a controller. F
 docker compose up
 ```
 
-That's it. MIG Core is running on port 8000.
+That's it. MIG Core backend API is running on port 8000. React frontend runs in a separate terminal on port 3000.
 
 ---
 
 ## What is MIG Core?
 
-MIG Core is a deterministic command validation engine that sits at the IT-OT boundary. It validates every command — human, automated, or adversarial — against operational safety policy before it reaches any control system.
+MIG Core is a deterministic command validation engine that sits at the IT-OT boundary. It validates every command — human, automated, or adversarial — against operational safety policy before reaching the controller.
+
+Three possible outcomes:
 
 - **ALLOW** — command is safe, proceed
 - **DENY** — command is blocked, controller never sees it
@@ -26,7 +28,7 @@ No AI. No machine learning. No cloud dependency. Pure policy matching. Determini
 
 ## Quick Start
 
-### With Docker (recommended)
+### Backend (Docker)
 
 ```bash
 git clone https://github.com/Indrooneel/mig-core.git
@@ -34,16 +36,19 @@ cd mig-core
 docker compose up
 ```
 
-MIG Core is now running at `http://localhost:8000`
+Backend API is now running at `http://localhost:8000`
 
-### Without Docker
+### Frontend (React)
+
+In a separate terminal:
 
 ```bash
-git clone https://github.com/Indrooneel/mig-core.git
-cd mig-core/backend
-pip install -r requirements.txt
-python mig_core.py
+cd mig-core/frontend
+npm install
+npm start
 ```
+
+Frontend is now running at `http://localhost:3000`
 
 ---
 
