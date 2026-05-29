@@ -1,0 +1,170 @@
+{
+    "deployment": {
+        "name": "LabShock Oilsprings Air",
+        "type": "oil_processing",
+        "protocol": "modbus_tcp",
+        "mig_mode": "proxy"
+    },
+    "plc_connection": {
+        "host": "PLC_IP_HERE",
+        "port": 502,
+        "timeout_seconds": 5,
+        "retry_attempts": 3
+    },
+    "equipment": [
+        {
+            "id": "pump-001",
+            "name": "Process Water Pump 1",
+            "type": "centrifugal_pump",
+            "registers": {
+                "speed": {
+                    "address": 10,
+                    "type": "holding",
+                    "unit": "RPM",
+                    "read_write": "rw"
+                }
+            },
+            "limits": {
+                "speed": {
+                    "min_safe": 10,
+                    "max_safe": 100,
+                    "max_warning": 120,
+                    "max_critical": 150,
+                    "trip": 200,
+                    "baseline": 50
+                }
+            },
+            "failure_modes": [
+                "Cavitation below 10 RPM",
+                "Bearing stress above 120 RPM",
+                "Mechanical failure above 150 RPM"
+            ]
+        },
+        {
+            "id": "pump-002",
+            "name": "Process Water Pump 2",
+            "type": "centrifugal_pump",
+            "registers": {
+                "speed": {
+                    "address": 20,
+                    "type": "holding",
+                    "unit": "RPM",
+                    "read_write": "rw"
+                }
+            },
+            "limits": {
+                "speed": {
+                    "min_safe": 10,
+                    "max_safe": 100,
+                    "max_warning": 120,
+                    "max_critical": 150,
+                    "trip": 200,
+                    "baseline": 50
+                }
+            },
+            "failure_modes": [
+                "Cavitation below 10 RPM",
+                "Bearing stress above 120 RPM",
+                "Mechanical failure above 150 RPM"
+            ]
+        }
+    ],
+    "sensors": [
+        {
+            "id": "pressure-in",
+            "name": "Inlet Pressure",
+            "register": {"address": 1, "type": "input"},
+            "unit": "kPa",
+            "normal_range": [2500, 3000]
+        },
+        {
+            "id": "pressure-out",
+            "name": "Outlet Pressure",
+            "register": {"address": 2, "type": "input"},
+            "unit": "kPa",
+            "normal_range": [2900, 3400]
+        },
+        {
+            "id": "flow-rate",
+            "name": "Flow Rate",
+            "register": {"address": 4, "type": "input"},
+            "unit": "L/min",
+            "normal_range": [25, 45]
+        },
+        {
+            "id": "temp-in",
+            "name": "Inlet Temperature",
+            "register": {"address": 5, "type": "input"},
+            "unit": "°C",
+            "normal_range": [10, 25]
+        },
+        {
+            "id": "temp-out",
+            "name": "Outlet Temperature",
+            "register": {"address": 6, "type": "input"},
+            "unit": "°C",
+            "normal_range": [10, 30]
+        }
+    ],
+    "policies": {
+        "auto_generate": true,
+        "rules": [
+            {
+                "id": "AUTO-OT-001",
+                "description": "Block writes exceeding equipment max_safe limit",
+                "trigger": "write_value > equipment.limits.max_safe",
+                "decision": "DENY",
+                "notify": ["operator", "safety_officer"]
+            },
+            {
+                "id": "AUTO-OT-002",
+                "description": "Require approval for writes in warning zone",
+                "trigger": "write_value > equipment.limits.max_safe AND write_value <= equipment.limits.max_warning",
+                "decision": "APPROVAL",
+                "notify": ["operator"]
+            },
+            {
+                "id": "AUTO-OT-003",
+                "description": "Allow reads on all sensor registers",
+                "trigger": "read on input_register",
+                "decision": "ALLOW",
+                "notify": []
+            },
+            {
+                "id": "AUTO-OT-004",
+                "description": "Block all writes during emergency mode",
+                "trigger": "mode == emergency AND action == write",
+                "decision": "DENY",
+                "notify": ["safety_officer", "plant_supervisor"]
+            },
+            {
+                "id": "AUTO-OT-005",
+                "description": "Block writes to undefined registers",
+                "trigger": "register NOT IN equipment.registers",
+                "decision": "DENY",
+                "notify": ["security_team"]
+            }
+        ]
+    },
+    "modes": {
+        "current": "running",
+        "available": ["running", "maintenance", "startup", "shutdown", "emergency"],
+        "mode_rules": {
+            "running": {
+                "allow_writes": true,
+                "allow_firmware": false,
+                "require_approval_above": "max_safe"
+            },
+            "maintenance": {
+                "allow_writes": true,
+                "allow_firmware": true,
+                "require_approval_above": "max_warning"
+            },
+            "emergency": {
+                "allow_writes": false,
+                "allow_firmware": false,
+                "require_approval_above": null
+            }
+        }
+    }
+}
