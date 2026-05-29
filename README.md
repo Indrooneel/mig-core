@@ -199,6 +199,143 @@ Controller / Target System
 ```
 
 ---
+## OT Connector — Bridge MIG Core to Real PLCs
+
+MIG Core validates commands. The OT Connector delivers them to controllers.
+
+**MIG Core** is the brain — every command passes through the full validation pipeline.  
+**OT Connector** is the hands — translates Modbus register writes, routes them through MIG Core, and only forwards approved commands to the PLC.
+
+```
+Command → OT Connector → MIG Core /validate → Decision
+                                                  │
+                                          ┌───────┼───────┐
+                                          │       │       │
+                                        ALLOW   DENY   APPROVAL
+                                          │       │       │
+                                          ▼       ✕       ⏸
+                                     PLC writes  Blocked  Held for
+                                     the value           operator
+```
+
+### Setup
+
+**Step 1** — Start MIG Core:
+```bash
+docker compose up
+```
+
+**Step 2** — Configure your OT environment:
+```bash
+# Edit with your PLC IP address, register map, and equipment limits
+nano configs/ot_deployment_config.json
+```
+
+The config file maps your equipment to Modbus registers:
+```json
+{
+    "plc_connection": {
+        "host": "YOUR_PLC_IP",
+        "port": 502
+    },
+    "equipment": [
+        {
+            "id": "pump-001",
+            "name": "Process Water Pump 1",
+            "registers": {
+                "speed": { "address": 10, "unit": "RPM" }
+            },
+            "limits": {
+                "speed": {
+                    "min_safe": 10,
+                    "max_safe": 100,
+                    "baseline": 50
+                }
+            }
+        }
+    ]
+}
+```
+
+**Step 3** — Start the OT Connector:
+```bash
+cd backend
+pip install pyModbusTCP requests
+python mig_ot_connector.py
+```
+
+MIG Core runs on port 8000. OT Connector runs on port 8001.
+
+### Usage
+
+```bash
+# Safe write — 50 RPM on pump rated for 100
+curl -X POST http://localhost:8001/write \
+  -H "Content-Type: application/json" \
+  -d '{"register": 10, "value": 50}'
+# → MIG Core: ALLOW → PLC executes
+
+# Dangerous write — 5000 RPM on pump rated for 100
+curl -X POST http://localhost:8001/write \
+  -H "Content-Type: application/json" \
+  -d '{"register": 10, "value": 5000}'
+# → MIG Core: DENY → PLC never sees this command
+
+# Read plant status
+curl http://localhost:8001/status
+
+# View pending operator approvals
+curl http://localhost:8001/pending
+
+# Approve a held command
+curl -X POST http://localhost:8001/approve \
+  -H "Content-Type: application/json" \
+  -d '{"decision_id": "dec_xxx", "approved_by": "operator1"}'
+```
+
+### Fail-Closed Guarantee
+
+- MIG Core unreachable → all writes **DENY**
+- MIG Core timeout → all writes **DENY**
+- MIG Core error → all writes **DENY**
+- Unknown register → **DENY**
+
+The OT Connector never forwards a command without MIG Core approval.
+
+### LabShock Integration
+
+Connect to LabShock Oilsprings Air for testing:
+
+```bash
+# Get PLC IP from LabShock container
+docker inspect lab-plc-1 --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}'
+
+# Update config with PLC IP
+nano configs/ot_deployment_config.json
+
+# Start OT Connector
+python backend/mig_ot_connector.py
+
+# Every Modbus write now routes through MIG Core
+```
+
+### API Endpoints (OT Connector — port 8001)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/write` | Validate and execute a Modbus write |
+| POST | `/read` | Read a register from the PLC |
+| POST | `/text` | Send a text command to MIG Core directly |
+| POST | `/approve` | Approve a pending command |
+| POST | `/reject` | Reject a pending command |
+| POST | `/mode` | Change operational mode |
+| GET | `/status` | Read all sensor and equipment values |
+| GET | `/pending` | List commands awaiting approval |
+| GET | `/equipment` | List configured equipment |
+| GET | `/sensors` | List configured sensors |
+| GET | `/health` | System status including MIG Core connection |
+| GET | `/audit` | Decision history |
+
 
 ## Built By
 
